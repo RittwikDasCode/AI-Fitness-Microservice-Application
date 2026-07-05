@@ -1,0 +1,112 @@
+name: CI/CD Microservices Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - 'configserver/**'
+      - 'eureka/**'
+      - 'gateway/**'
+      - 'userservice/**'
+      - 'activityservice/**'
+      - 'aiservice/**'
+      - 'fitness-app-frontend/**'
+
+jobs:
+  # 1. Dynamically detect which microservices actually changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            configserver: 'configserver/**'
+            eureka: 'eureka/**'
+            gateway: 'gateway/**'
+            userservice: 'userservice/**'
+            activityservice: 'activityservice/**'
+            aiservice: 'aiservice/**'
+            frontend: 'fitness-app-frontend/**'
+
+  # 2. Build ONLY the backend microservices that had modifications
+  build-backend:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: ${{ needs.changes.outputs.services != '[]' && needs.changes.outputs.services != '["frontend"]' }}
+    strategy:
+      matrix:
+        # Extracts the detected changed services, ignoring the frontend web-app
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+        exclude:
+          - service: frontend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: |
+          cd ${{ matrix.service }}
+          mvn clean package -DskipTests
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build & Push Service Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/fitness-${{ matrix.service }}:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/fitness-${{ matrix.service }}:${{ github.sha }}
+
+  # 3. Build React Frontend ONLY if frontend files changed
+  build-frontend:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: contains(needs.changes.outputs.services, 'frontend')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './fitness-app-frontend/package-lock.json'
+
+      - name: Build Web App
+        run: |
+          cd fitness-app-frontend
+          npm install
+          npm run build
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build & Push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./fitness-app-frontend
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/fitness-frontend:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/fitness-frontend:${{ github.sha }}
