@@ -14,7 +14,7 @@ RUN npm run build
 FROM nginx:1.25-alpine
 
 # Copy customized assets over to Nginx public distribution folder
-COPY --from=builder /app/build /usr/share/nginx/html
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Replace default config to handle React SPA Client-Side Routing smoothly
 RUN rm /etc/nginx/conf.d/default.conf
