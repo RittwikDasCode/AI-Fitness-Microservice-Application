@@ -10,7 +10,7 @@ on:
       - 'userservice/**'
       - 'activityservice/**'
       - 'aiservice/**'
-      - 'fitness-app-frontend/**'
+      - 'fitness-frontend/**'
 
 jobs:
   # 1. Dynamically detect which microservices actually changed
@@ -30,7 +30,7 @@ jobs:
             userservice: 'userservice/**'
             activityservice: 'activityservice/**'
             aiservice: 'aiservice/**'
-            frontend: 'fitness-app-frontend/**'
+            frontend: 'fitness-frontend/**'
 
   # 2. Build ONLY the backend microservices that had modifications
   build-backend:
@@ -88,11 +88,11 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: './fitness-app-frontend/package-lock.json'
+          cache-dependency-path: './fitness-frontend/package-lock.json'
 
       - name: Build Web App
         run: |
-          cd fitness-app-frontend
+          cd fitness-frontend
           npm install
           npm run build
 
@@ -105,7 +105,7 @@ jobs:
       - name: Build & Push Frontend Image
         uses: docker/build-push-action@v5
         with:
-          context: ./fitness-app-frontend
+          context: ./fitness-frontend
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/fitness-frontend:latest
